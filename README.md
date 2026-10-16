@@ -66,6 +66,9 @@ src/eval/run_baseline.py       run A (resumable)
 src/eval/run_governed.py       run B and C, print comparison table
 src/eval/make_cases_v1.py      generates the extra test cases
 src/eval/check_labels.py       checks labels against the rule engine
+src/webapp/streamlit_app.py    demo: submit requests, human review queue, audit log
+src/webapp/pipeline.py         one request through intake -> rules -> kill switch
+src/webapp/audit.py            tamper-evident (hash-chained) audit log
 ```
 
 ## Run it
@@ -88,11 +91,23 @@ python src/eval/run_governed.py --cases cases_v1.jsonl
 
 Any OpenAI-compatible API works by changing the three `.env` values.
 
+## Dashboard
+
+```bash
+pip install -r requirements.txt
+streamlit run src/webapp/streamlit_app.py
+```
+
+- **New request**: type a message and order details (or load any of the 86 test cases), and see the decision with the policy clauses cited.
+- **Review queue**: escalated cases wait for a human, who approves (capped at what the customer paid) or rejects with a note.
+- **Audit log**: every decision and human review is appended to a hash-chained log. Editing an old entry breaks the chain, and the page detects it. (Tamper-evident, not tamper-proof.)
+- **Kill switch** (sidebar): turns off automatic approvals, so every would-be approval goes to a human.
+- Intake can use the LLM, a simple keyword matcher (so the demo runs without any model), or a manually chosen reason. The keyword matcher is much weaker than the LLM and exists only for demos.
+
+<!-- Add a screenshot here: ![dashboard](docs/dashboard.png) -->
+
 ## Roadmap
 
-- Human review dashboard for escalated cases, with an append-only audit log of every decision.
 - Fresh held-out test cases (no tuning on the current set).
 - Repeated runs to report variance, and a second model for comparison.
-- API and a deployed demo.
-
-Built by Uday Gaikwad
+- Public deployed demo (the keyword intake mode runs without a model).

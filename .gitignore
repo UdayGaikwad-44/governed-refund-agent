@@ -4,3 +4,4 @@ __pycache__/
 data/raw/
 results/progress_*.json
 results/intake_*.json
+data/runtime/
