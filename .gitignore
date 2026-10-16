@@ -1,0 +1,6 @@
+.env
+__pycache__/
+.DS_Store
+data/raw/
+results/progress_*.json
+results/intake_*.json
