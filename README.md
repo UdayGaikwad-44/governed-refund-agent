@@ -44,10 +44,32 @@ flowchart LR
 3. **Prompt injection has limited reach when the LLM only classifies.** In B, injected instructions can at most change the reason label, and the rules still check windows, limits, and history.
 4. **LLM output varies between runs.** In an earlier run on 30 cases, `gpt-oss-20b` at temperature 0 got two boundary cases wrong in one run and right in the next. Code does not do this.
 
+## Held-out check
+
+After the first 86 cases, I wrote 40 new cases (`cases_v2.jsonl`, ids H01-H40) with hand-written, varied phrasing and ran them once. The intake prompt and `rules.py` were not changed between the two runs. I wrote these after seeing the v1 results, so they are held out from tuning but not blind.
+
+| System | Accuracy | Unsafe approvals | Unnecessary escalations | Denied without required review | Wrong amounts | Injection held |
+|---|---|---|---|---|---|---|
+| A. LLM decides alone | 35.0% | 2 | 17 | 6 | 1 | 2/5 |
+| B. LLM intake + rule engine | 100% | 0 | 0 | 0 | 0 | 5/5 |
+| C. LLM decides + safety gate | 42.5% | 0 | 17 | 6 | 0 | 2/5 |
+
+Intake accuracy on the new phrasing: **38/40** (v1: 83/86). Both misses were harmless: one case was decided earlier in the rule precedence (window check), and the other had no matching order. That is a property of this particular set, not a guarantee.
+
+**Combined, 126 cases:**
+
+| System | Accuracy | Unsafe approvals | Unnecessary escalations | Denied without required review | Injection held |
+|---|---|---|---|---|---|
+| A. LLM decides alone | 43.7% | 6 | 49 | 15 | 11/17 |
+| B. LLM intake + rule engine | 98.4% | 0 | 1 | 0 | 16/17* |
+| C. LLM decides + safety gate | 49.2% | 0 | 49 | 15 | 11/17 |
+
+Intake accuracy overall: 121/126 (96.0%; roughly 91-98% as a 95% interval, given the small sample). \* The one miss is a fail-closed escalation.
+
 ## Limitations (please read)
 
 - **B's accuracy is partly by construction.** Test labels come from the same rule engine (the 30 hand-written labels were verified against it, and the 56 generated ones were derived from it). The meaningful AI measurement is intake accuracy, not end-to-end accuracy.
-- Small test set (86 cases), single run, one small model. Numbers would shift with other models.
+- Small test sets (86 + 40 cases), one run each, one small model. Numbers would shift with other models.
 - Test messages are synthetic. Real customers write messier text than any generator.
 - The policy is a fictional one modeled on common Indian e-commerce practices, not any real company's rules.
 - Image evidence is represented by a photo count, not analyzed.
@@ -58,13 +80,15 @@ flowchart LR
 policy/return_policy.md        20 numbered clauses + precedence order
 data/eval/cases_v0.jsonl       30 hand-written cases
 data/eval/cases_v1.jsonl       86 cases (v0 + generated)
+data/eval/cases_v2.jsonl       40 held-out cases with hand-written messages
 src/governance/rules.py        deterministic rule engine
 src/agents/baseline.py         System A: LLM decides alone
 src/agents/governed.py         Systems B and C: intake + rules, safety gate
 src/eval/metrics.py            scoring
 src/eval/run_baseline.py       run A (resumable)
 src/eval/run_governed.py       run B and C, print comparison table
-src/eval/make_cases_v1.py      generates the extra test cases
+src/eval/make_cases_v1.py      generates the extra v1 test cases
+src/eval/make_cases_v2.py      generates the held-out v2 cases
 src/eval/check_labels.py       checks labels against the rule engine
 src/webapp/streamlit_app.py    demo: submit requests, human review queue, audit log
 src/webapp/pipeline.py         one request through intake -> rules -> kill switch
@@ -108,6 +132,5 @@ streamlit run src/webapp/streamlit_app.py
 
 ## Roadmap
 
-- Fresh held-out test cases (no tuning on the current set).
 - Repeated runs to report variance, and a second model for comparison.
 - Public deployed demo (the keyword intake mode runs without a model).
