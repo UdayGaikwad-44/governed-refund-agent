@@ -1,0 +1,8 @@
+[
+  {"customer_id": "C-01", "flagged": false},
+  {"customer_id": "C-02", "flagged": false},
+  {"customer_id": "C-03", "flagged": false},
+  {"customer_id": "C-04", "flagged": true},
+  {"customer_id": "C-05", "flagged": false},
+  {"customer_id": "C-06", "flagged": false}
+]

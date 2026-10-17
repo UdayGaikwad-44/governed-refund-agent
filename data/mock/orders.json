@@ -1,0 +1,12 @@
+[
+  {"order_id": "O-1001", "customer_id": "C-01", "category": "home",        "item_price": 1499,  "shipping_fee": 99, "delivered_days_ago": 2,    "tracking_status": "delivered"},
+  {"order_id": "O-1002", "customer_id": "C-01", "category": "fashion",     "item_price": 799,   "shipping_fee": 49, "delivered_days_ago": 5,    "tracking_status": "delivered"},
+  {"order_id": "O-1003", "customer_id": "C-02", "category": "electronics", "item_price": 54999, "shipping_fee": 0,  "delivered_days_ago": 3,    "tracking_status": "delivered"},
+  {"order_id": "O-1004", "customer_id": "C-02", "category": "electronics", "item_price": 1999,  "shipping_fee": 49, "delivered_days_ago": 4,    "tracking_status": "delivered"},
+  {"order_id": "O-1005", "customer_id": "C-03", "category": "fashion",     "item_price": 1299,  "shipping_fee": 49, "delivered_days_ago": null, "tracking_status": "in_transit"},
+  {"order_id": "O-1006", "customer_id": "C-03", "category": "books",       "item_price": 450,   "shipping_fee": 40, "delivered_days_ago": null, "tracking_status": "lost"},
+  {"order_id": "O-1007", "customer_id": "C-04", "category": "home",        "item_price": 600,   "shipping_fee": 49, "delivered_days_ago": 2,    "tracking_status": "delivered"},
+  {"order_id": "O-1008", "customer_id": "C-05", "category": "innerwear",   "item_price": 599,   "shipping_fee": 49, "delivered_days_ago": 2,    "tracking_status": "delivered"},
+  {"order_id": "O-1009", "customer_id": "C-05", "category": "grocery",     "item_price": 650,   "shipping_fee": 49, "delivered_days_ago": 1,    "tracking_status": "delivered"},
+  {"order_id": "O-1010", "customer_id": "C-06", "category": "home",        "item_price": 2951,  "shipping_fee": 49, "delivered_days_ago": 2,    "tracking_status": "delivered"}
+]

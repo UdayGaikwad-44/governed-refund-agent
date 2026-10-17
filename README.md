@@ -93,6 +93,12 @@ src/eval/check_labels.py       checks labels against the rule engine
 src/webapp/streamlit_app.py    demo: submit requests, human review queue, audit log
 src/webapp/pipeline.py         one request through intake -> rules -> kill switch
 src/webapp/audit.py            tamper-evident (hash-chained) audit log
+src/api/main.py                FastAPI app: endpoints, auth
+src/api/service.py             one request end to end, human review
+src/api/adapters.py            OrderStore / RefundGateway interfaces + mocks
+src/api/db.py                  SQLite storage + hash-chained audit table
+data/mock/                     mock orders and customers
+tests/test_api.py              20 API tests
 ```
 
 ## Run it
@@ -130,7 +136,47 @@ streamlit run src/webapp/streamlit_app.py
 
 <!-- Add a screenshot here: ![dashboard](docs/dashboard.png) -->
 
+## API and adapter layer
+
+```bash
+pip install -r requirements.txt
+uvicorn api.main:app --app-dir src --reload      # docs at http://127.0.0.1:8000/docs
+pytest -q tests                                   # 20 tests
+```
+
+Set `API_KEY` in `.env` (default `dev-key` for local use) and send it as the `X-API-Key` header. `INTAKE_MODE=keyword` (default) needs no model; `INTAKE_MODE=llm` uses the Ollama or OpenAI-compatible settings from `.env`.
+
+| Endpoint | Purpose |
+|---|---|
+| `POST /refund-requests` | Submit `{order_id, customer_id, message, photos}`. Returns the decision, clauses, and a customer-facing message. |
+| `GET /refund-requests/{id}` | Look up a request and its decision details. |
+| `GET /reviews/pending` | Escalated cases waiting for a human. |
+| `POST /reviews/{id}` | Human approves (capped at what is left of the payment) or rejects. |
+| `GET/POST /admin/kill-switch` | Turn automatic approvals off or on. |
+| `GET /audit`, `GET /audit/verify` | Recent audit entries and the hash-chain integrity check. |
+
+```bash
+curl -X POST localhost:8000/refund-requests -H "X-API-Key: dev-key" -H "Content-Type: application/json" \
+  -d '{"order_id":"O-1001","customer_id":"C-01","message":"The vase arrived broken, photo attached.","photos":1}'
+```
+
+**Facts never come from the customer.** The request carries only an order id, a customer id, a message, and a photo count. Price, category, delivery date, tracking status, account flags, and refund history are looked up from the store and from this system's own records.
+
+**Controls beyond the written policy:** a duplicate-refund guard (a second approval on the same order goes to a human), the kill switch, fail-closed intake, idempotency keys on every refund, and a payment-side check that refuses to refund more than was captured.
+
+### Connecting a real store
+
+The system touches the outside world through two interfaces in `src/api/adapters.py`:
+
+- `OrderStore`: `get_order(order_id)` and `is_flagged(customer_id)`. A real version would call the store's order API (Shopify, WooCommerce, or an in-house system) and map the response to the fields the rule engine needs.
+- `RefundGateway`: `issue_refund(order_id, amount, idempotency_key)`. A real version would call the payment provider's refund API (Razorpay, Stripe, or the store's own), passing the idempotency key so retries cannot refund twice.
+
+Intake, the rule engine, the audit log, and the review queue do not change. The included mocks (`MockOrderStore`, `MockRefundGateway`) are for development and tests. I have not built or tested any real integration, and each provider's current API documentation and permissions would need to be checked.
+
+**Not production-ready:** one shared API key (no per-user login), reviewer names are self-reported, SQLite instead of a production database, no rate limiting, and no image analysis. A real rollout would start in shadow mode, with humans still deciding while the system's suggestions are compared against theirs.
+
 ## Roadmap
 
 - Repeated runs to report variance, and a second model for comparison.
 - Public deployed demo (the keyword intake mode runs without a model).
+- Docker packaging and a real database.
