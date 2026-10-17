@@ -1,6 +1,6 @@
 # Governed Refund Agent
 
-**Live demo:** _add your Streamlit link here after deploying_
+**Live demo:** https://governed-refund-agent.streamlit.app/
 
 An e-commerce refund system where an LLM reads the customer's message, but **a deterministic rule engine makes the decision**. The project compares three designs on 86 labeled cases and measures what each one gets wrong.
 
