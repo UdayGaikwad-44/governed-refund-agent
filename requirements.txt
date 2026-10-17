@@ -1,8 +1,4 @@
-openai>=1.0
-python-dotenv
 streamlit
 pandas
-fastapi
-uvicorn
-httpx
-pytest
+python-dotenv
+openai>=1.0

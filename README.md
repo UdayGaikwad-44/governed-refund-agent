@@ -1,5 +1,7 @@
 # Governed Refund Agent
 
+**Live demo:** _add your Streamlit link here after deploying_
+
 An e-commerce refund system where an LLM reads the customer's message, but **a deterministic rule engine makes the decision**. The project compares three designs on 86 labeled cases and measures what each one gets wrong.
 
 > Prototype on a fictional store ("ShopNest") with mock data. Not production-ready; no real payment system is connected.
@@ -93,6 +95,8 @@ src/eval/check_labels.py       checks labels against the rule engine
 src/webapp/streamlit_app.py    demo: submit requests, human review queue, audit log
 src/webapp/pipeline.py         one request through intake -> rules -> kill switch
 src/webapp/audit.py            tamper-evident (hash-chained) audit log
+requirements.txt               dashboard and evaluation dependencies
+requirements-api.txt           adds FastAPI, uvicorn, httpx, pytest
 src/api/main.py                FastAPI app: endpoints, auth
 src/api/service.py             one request end to end, human review
 src/api/adapters.py            OrderStore / RefundGateway interfaces + mocks
@@ -104,7 +108,7 @@ tests/test_api.py              20 API tests
 ## Run it
 
 ```bash
-pip install -r requirements.txt python-dotenv
+pip install -r requirements.txt
 ollama pull llama3.1                       # then create a larger-context copy:
 printf 'FROM llama3.1\nPARAMETER num_ctx 8192\nPARAMETER temperature 0\n' > Modelfile
 ollama create llama31-8k -f Modelfile
@@ -132,14 +136,24 @@ streamlit run src/webapp/streamlit_app.py
 - **Review queue**: escalated cases wait for a human, who approves (capped at what the customer paid) or rejects with a note.
 - **Audit log**: every decision and human review is appended to a hash-chained log. Editing an old entry breaks the chain, and the page detects it. (Tamper-evident, not tamper-proof.)
 - **Kill switch** (sidebar): turns off automatic approvals, so every would-be approval goes to a human.
-- Intake can use the LLM, a simple keyword matcher (so the demo runs without any model), or a manually chosen reason. The keyword matcher is much weaker than the LLM and exists only for demos.
+- Each browser session gets its own log and review queue, stored in a temporary file (set `PERSISTENT_LOG=1` to use the shared file `data/runtime/audit_log.jsonl` instead when running locally).
+- Intake can use the LLM (offered only when `LLM_MODEL` and `LLM_API_KEY` are set), a simple keyword matcher (so the demo runs without any model), or a manually chosen reason. The keyword matcher is much weaker than the LLM and exists only for demos.
 
 <!-- Add a screenshot here: ![dashboard](docs/dashboard.png) -->
+
+### Deploying the demo (Streamlit Community Cloud)
+
+1. Push the repo to GitHub (the root `requirements.txt` holds only what the dashboard needs).
+2. At share.streamlit.io, sign in with GitHub and choose **New app**.
+3. Select the repo, branch `main`, and main file path `src/webapp/streamlit_app.py`.
+4. Deploy. Do **not** add an LLM key to a public demo: without `LLM_MODEL` and `LLM_API_KEY` the app offers keyword and manual intake only, which is what a public visitor should get.
+
+Community Cloud's file system is temporary, which is why the dashboard keeps each visitor's log in a per-session temp file.
 
 ## API and adapter layer
 
 ```bash
-pip install -r requirements.txt
+pip install -r requirements-api.txt
 uvicorn api.main:app --app-dir src --reload      # docs at http://127.0.0.1:8000/docs
 pytest -q tests                                   # 20 tests
 ```

@@ -4,6 +4,7 @@ Run:  streamlit run src/webapp/streamlit_app.py
 import json
 import os
 import sys
+import tempfile
 import uuid
 from pathlib import Path
 
@@ -22,15 +23,27 @@ st.set_page_config(page_title="Governed Refund Agent", layout="wide")
 
 CATEGORIES = ["fashion", "home", "books", "toys", "electronics", "innerwear", "grocery", "personalized", "gift_card"]
 TRACKING = ["delivered", "lost", "returned_to_origin", "in_transit"]
-MODES = {"LLM intake (OpenAI-compatible, e.g. Ollama)": "llm",
-         "Keyword intake (demo, no LLM)": "keyword",
-         "Manual reason (no AI)": "manual"}
+LLM_OK = bool(os.environ.get("LLM_MODEL")) and bool(os.environ.get("LLM_API_KEY"))
+KEYWORD_LABEL = "Keyword intake (demo, no LLM)"
+MODES = {KEYWORD_LABEL: "keyword", "Manual reason (no AI)": "manual"}
+if LLM_OK:
+    MODES = {"LLM intake (OpenAI-compatible, e.g. Ollama)": "llm", **MODES}
 BLANK = "(blank form)"
 DEFAULTS = dict(msg="", order_exists=True, belongs=True, category="home", item_price=1000, shipping_fee=49,
                 tracking="delivered", days=3, photos=0, r90=0, v30=0, flagged=False,
                 manual_reason="damaged", expected=None, last=None)
 for k, v in DEFAULTS.items():
     st.session_state.setdefault(k, v)
+st.session_state.setdefault("sid", uuid.uuid4().hex[:12])
+
+# Each browser session gets its own log and review queue, so visitors never see each other's data.
+# Set PERSISTENT_LOG=1 to use the shared file data/runtime/audit_log.jsonl instead (local use).
+PERSIST = os.environ.get("PERSISTENT_LOG") == "1"
+LOG = audit.LOG if PERSIST else Path(tempfile.gettempdir()) / f"refund_demo_{st.session_state.sid}.jsonl"
+
+
+def append_log(event):
+    return audit.append(event, path=LOG)
 
 
 @st.cache_data
@@ -88,24 +101,28 @@ def load_example():
 # ------------------------------------------------------------------ sidebar
 with st.sidebar:
     st.header("Controls")
-    mode_label = st.radio("How is the customer message understood?", list(MODES), index=1)
+    mode_label = st.radio("How is the customer message understood?", list(MODES),
+                          index=list(MODES).index(KEYWORD_LABEL))
     mode = MODES[mode_label]
     if mode == "llm":
         st.caption(f"Model: `{os.environ.get('LLM_MODEL', '(set LLM_MODEL in .env)')}`  \n"
                    f"Endpoint: `{os.environ.get('LLM_BASE_URL', 'default')}`")
     if mode == "manual":
         st.selectbox("Reason", pipeline.REASONS, key="manual_reason")
+    if not LLM_OK:
+        st.caption("LLM intake is switched off in this deployment (no model configured).")
     st.divider()
     auto_approve = st.toggle("Allow automatic approvals", value=True,
                              help="Kill switch. When off, every would-be approval is sent to a human instead.")
     if not auto_approve:
         st.warning("Kill switch ON: all approvals go to human review.")
     st.divider()
-    ok, bad = audit.verify()
+    ok, bad = audit.verify(LOG)
     st.caption("Audit log integrity: " + ("✅ intact" if ok else f"❌ broken at entry {bad}"))
 
 st.title("Governed Refund Agent")
-st.caption("Prototype on a fictional store with mock data. An AI reads the message; a deterministic rule engine decides.")
+st.caption("Prototype on a fictional store with mock data. An AI reads the message; a deterministic rule engine decides. "
+           "Please do not enter personal information. Your session's log is private to this browser tab and is not kept permanently.")
 
 tab_new, tab_queue, tab_audit, tab_results = st.tabs(["New request", "Review queue", "Audit log", "Evaluation results"])
 
@@ -115,7 +132,7 @@ with tab_new:
         st.selectbox("Load a test case (optional)", [BLANK] + list(EXAMPLES), key="example", on_change=load_example)
     left, right = st.columns(2)
     with left:
-        st.text_area("Customer message", key="msg", height=130)
+        st.text_area("Customer message", key="msg", height=130, max_chars=1000)
         a, b = st.columns(2)
         a.checkbox("Order exists in system", key="order_exists")
         b.checkbox("Order belongs to this customer", key="belongs")
@@ -148,7 +165,7 @@ with tab_new:
             ss.msg, order, customer, evidence, mode, manual_reason=ss.manual_reason, auto_approve=auto_approve,
             client=get_client() if mode == "llm" else None, model=os.environ.get("LLM_MODEL"))
         rid = uuid.uuid4().hex[:8]
-        audit.append({"type": "decision", "request_id": rid, "message": ss.msg, "order": order,
+        append_log({"type": "decision", "request_id": rid, "message": ss.msg, "order": order,
                       "customer": customer, "evidence": evidence, **res})
         ss.last = {"request_id": rid, **res}
 
@@ -179,7 +196,7 @@ with tab_new:
 
 # ------------------------------------------------------------------ review queue
 with tab_queue:
-    pending = audit.pending_reviews()
+    pending = audit.pending_reviews(LOG)
     st.subheader(f"Escalated cases waiting for a human ({len(pending)})")
     if not pending:
         st.write("Nothing waiting.")
@@ -200,18 +217,18 @@ with tab_queue:
             note = r3.text_input("Note", key=f"note_{rid}")
             b1, b2 = st.columns(2)
             if b1.button("Approve refund", key=f"ap_{rid}", disabled=not who.strip() or amt <= 0):
-                audit.append({"type": "human_review", "request_id": rid, "reviewer": who.strip(),
+                append_log({"type": "human_review", "request_id": rid, "reviewer": who.strip(),
                               "decision": "approve", "refund_amount": amt, "note": note})
                 st.rerun()
             if b2.button("Reject", key=f"rj_{rid}", disabled=not who.strip()):
-                audit.append({"type": "human_review", "request_id": rid, "reviewer": who.strip(),
+                append_log({"type": "human_review", "request_id": rid, "reviewer": who.strip(),
                               "decision": "reject", "refund_amount": 0, "note": note})
                 st.rerun()
 
 # ------------------------------------------------------------------ audit log
 with tab_audit:
-    entries = audit.read_all()
-    ok, bad = audit.verify()
+    entries = audit.read_all(LOG)
+    ok, bad = audit.verify(LOG)
     st.subheader(f"Audit log ({len(entries)} entries)")
     st.write("Chain check: " + ("✅ every entry links to the one before it" if ok else f"❌ tampering detected at entry {bad}"))
     if entries:
@@ -222,7 +239,7 @@ with tab_audit:
             "refund": e.get("refund_amount"), "reviewer": e.get("reviewer"),
             "hash": e["hash"][:10]} for e in entries])
         st.dataframe(df.iloc[::-1], hide_index=True)
-        st.download_button("Download full log (JSONL)", audit.LOG.read_text(), file_name="audit_log.jsonl")
+        st.download_button("Download full log (JSONL)", LOG.read_text(), file_name="audit_log.jsonl")
     else:
         st.write("No entries yet. Submit a request first.")
     st.caption("Tamper-evident, not tamper-proof: editing an old line breaks the hash chain, which this page detects.")
@@ -231,7 +248,10 @@ with tab_audit:
 with tab_results:
     tables = sorted((ROOT / "results").glob("results_table_*.md"))
     if tables:
-        st.markdown(tables[-1].read_text())
-        st.caption("A = LLM decides alone. B = LLM intake + rule engine (this app). C = LLM decides + safety gate.")
+        for t in tables:
+            st.subheader(t.stem.replace("results_table_", "Test set: "))
+            st.markdown(t.read_text())
+        st.caption("A = LLM decides alone. B = LLM intake + rule engine (this app). C = LLM decides + safety gate. "
+                   "Measured with a local Llama 3.1 8B model; see the README for caveats.")
     else:
         st.info("Run the evaluation scripts to generate results/results_table_*.md.")
